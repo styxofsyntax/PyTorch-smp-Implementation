@@ -12,6 +12,7 @@ training:
   valid_mask_path: ""
   test_image_path: ""
   test_mask_path: ""
+  pos_weight: [1.0, 1.0, 1.0]
   batch_size: 32
   num_workers: 4
   learning_rate: 1.0e-3
