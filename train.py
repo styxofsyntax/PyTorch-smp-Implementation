@@ -14,6 +14,8 @@ from torchmetrics.segmentation import DiceScore
 from torchvision import transforms
 from PIL import Image
 
+from utils.loss_function import WeightedCategoricalCrossEntropy, FocalLoss
+
 with open("model_config.yaml", "r") as f:
     cfg = yaml.safe_load(f)
 
@@ -25,7 +27,7 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 # Dataset
 class SegmentationDataset(Dataset):
-    def __init__(self, images_dir, masks_dir, transform=None, img_size=(256, 256)):
+    def __init__(self, images_dir, masks_dir, transform=None, img_size=(640, 640)):
         self.image_paths = sorted(os.listdir(images_dir))
         self.mask_paths = sorted(os.listdir(masks_dir))
         self.images_dir = images_dir
@@ -61,7 +63,7 @@ class SegmentationDataset(Dataset):
 
 
 tf = transforms.Compose([
-    transforms.Resize((256, 256)),
+    transforms.Resize((640, 640)),
     transforms.ToTensor(),
 ])
 
@@ -71,11 +73,11 @@ val_ds = SegmentationDataset(
     train_cfg["valid_image_path"], train_cfg["valid_mask_path"], transform=tf)
 
 train_loader = DataLoader(train_ds, batch_size=train_cfg["batch_size"],
-                          shuffle=True, num_workers=train_cfg["num_workers"])
+                          shuffle=True, num_workers=train_cfg["num_workers"], drop_last=True,)
 valid_loader = DataLoader(val_ds,   batch_size=train_cfg["batch_size"],
-                          shuffle=False, num_workers=train_cfg["num_workers"])  # no shuffle for val :contentReference[oaicite:6]{index=6}
+                          shuffle=False, num_workers=train_cfg["num_workers"], drop_last=True,)  # no shuffle for val :contentReference[oaicite:6]{index=6}
 
-model = smp.Unet(
+model = smp.DeepLabV3Plus(
     encoder_name=model_cfg["encoder_name"],
     encoder_weights=model_cfg["encoder_weights"],
     in_channels=model_cfg["in_channels"],
@@ -87,8 +89,12 @@ model = smp.Unet(
 pos_weight = torch.tensor(
     train_cfg["pos_weight"], dtype=torch.float32).to(device)
 pos_weight = pos_weight.view(-1, 1, 1)
-criterion = nn.MultiLabelSoftMarginLoss(weight=pos_weight)
-# criterion = nn.BCEWithLogitsLoss(pos_weight=pos_weight)
+
+# criterion = WeightedCategoricalCrossEntropy(weights=pos_weight)
+
+# criterion = nn.MultiLabelSoftMarginLoss(weight=pos_weight)
+criterion = nn.BCEWithLogitsLoss(pos_weight=pos_weight)
+# criterion = FocalLoss()
 
 # metric_iou = IoU(
 # num_classes=model_cfg["num_classes"], ignore_index=0).to(device)
@@ -146,6 +152,7 @@ for epoch in range(train_cfg["num_epochs"]):
         imgs, masks = imgs.to(device), masks.to(device).float()
         preds = model(imgs)
         loss = criterion(preds, masks)
+        loss = torch.mean(loss * pos_weight)
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
@@ -163,9 +170,15 @@ for epoch in range(train_cfg["num_epochs"]):
         for imgs, masks in val_bar:
             imgs, masks = imgs.to(device), masks.to(device).float()
             preds = model(imgs)
-            val_loss += criterion(preds, masks).item()
-            metric_f1.update(preds, masks.long())
-            metric_dice.update(preds, masks.long())
+            # val_loss += criterion(preds, masks).item()
+            loss = criterion(preds, masks)
+            loss = torch.mean(loss * pos_weight)
+            val_loss += loss.item()
+
+            probs = torch.sigmoid(preds)
+
+            metric_f1.update(probs, masks.long())
+            metric_dice.update(probs, masks.long())
 
             val_bar.set_postfix(loss=val_loss / (val_bar.n + 1))
 
