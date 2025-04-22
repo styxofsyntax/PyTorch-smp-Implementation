@@ -1,0 +1,22 @@
+model:
+  encoder_name: "resnet34"
+  encoder_weights: "imagenet"
+  in_channels: 3
+  num_classes: 3
+  activation: "sigmoid"
+
+training:
+  train_image_path: ""
+  train_mask_path: ""
+  valid_image_path: ""
+  valid_mask_path: ""
+  test_image_path: ""
+  test_mask_path: ""
+  batch_size: 32
+  num_workers: 4
+  learning_rate: 1.0e-3
+  num_epochs: 2
+  early_stopping_patience: 10
+  early_stopping_delta: 1.0e-4
+  scheduler_patience: 5
+  scheduler_factor: 0.5
