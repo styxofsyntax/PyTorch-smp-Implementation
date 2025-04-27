@@ -7,6 +7,7 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from torch.utils.data import DataLoader, Dataset
+from torch.utils.data import WeightedRandomSampler
 import segmentation_models_pytorch as smp
 from torchmetrics.classification import MultilabelF1Score
 from torchmetrics.segmentation import DiceScore
@@ -27,7 +28,25 @@ train_cfg = cfg["training"]
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
+def build_weighted_sampler(dataset, damage_class_idx=2):
+    sample_weights = []
+
+    for _, mask_tensor in dataset:
+        # Check if any pixel of damage class is 1
+        damage_present = mask_tensor[damage_class_idx].sum() > 0
+        if damage_present:
+            # Higher weight for images containing damage
+            sample_weights.append(5.0)
+        else:
+            sample_weights.append(1.0)  # Normal weight otherwise
+
+    sampler = WeightedRandomSampler(
+        sample_weights, num_samples=len(sample_weights), replacement=True)
+    return sampler
+
 # Dataset
+
+
 class SegmentationDataset(Dataset):
     def __init__(self, images_dir, masks_dir, transform=None, img_size=(640, 640)):
         self.image_paths = sorted(os.listdir(images_dir))
@@ -74,8 +93,10 @@ train_ds = SegmentationDataset(
 val_ds = SegmentationDataset(
     train_cfg["valid_image_path"], train_cfg["valid_mask_path"], transform=tf)
 
+sampler = build_weighted_sampler(train_ds)
+
 train_loader = DataLoader(train_ds, batch_size=train_cfg["batch_size"],
-                          shuffle=True, num_workers=train_cfg["num_workers"], drop_last=True,)
+                          sampler=sampler, num_workers=train_cfg["num_workers"], drop_last=True,)
 valid_loader = DataLoader(val_ds,   batch_size=train_cfg["batch_size"],
                           shuffle=False, num_workers=train_cfg["num_workers"], drop_last=True,)
 
