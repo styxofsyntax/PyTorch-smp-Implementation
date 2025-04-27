@@ -4,3 +4,4 @@ model_config.yaml
 *.png
 *.jpg
 */__pycache__/
+/runs/
