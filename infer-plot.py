@@ -23,7 +23,7 @@ model_cfg = cfg["model"]
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-model = smp.Unet(
+model = smp.FPN(
     encoder_name=model_cfg["encoder_name"],
     encoder_weights=model_cfg["encoder_weights"],
     in_channels=model_cfg["in_channels"],
@@ -79,7 +79,7 @@ blended_poly = cv2.addWeighted(
 
 # =================== SMP U-Net Prediction ===================
 # Load pre-processed image
-preproc_image = Image.open(image_path_preprocess).convert("RGB")
+preproc_image = Image.open(image_path_raw).convert("RGB")
 input_tensor = transform(preproc_image).unsqueeze(0).to(device)
 
 with torch.no_grad():
@@ -92,7 +92,7 @@ overlay_mask = np.zeros_like(original, dtype=np.uint8)
 
 # Assume class 0 = background, 1 = card, 2 = damage
 # Card: Blue, Damage: Green
-for cls_idx, color in zip([1, 2], [(255, 0, 0), (0, 0, 255)]):
+for cls_idx, color in zip([1, 2], [(0, 0, 255), (255, 0, 0)]):
     mask = preds[cls_idx]
     overlay_mask[mask > 0.5] = color
 
@@ -106,7 +106,7 @@ axs[0].set_title("Original Annotations")
 axs[0].axis("off")
 
 axs[1].imshow(blended_mask)
-axs[1].set_title("U-Net Prediction on Preprocessed Image")
+axs[1].set_title("Prediction")
 axs[1].axis("off")
 
 plt.tight_layout()

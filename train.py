@@ -16,6 +16,7 @@ from datetime import datetime
 
 from utils.csv_logger import CSVLogger
 from utils.early_stopping import EarlyStopping
+from utils.loss_function import ComboLoss
 
 with open("model_config.yaml", "r") as f:
     cfg = yaml.safe_load(f)
@@ -78,7 +79,7 @@ train_loader = DataLoader(train_ds, batch_size=train_cfg["batch_size"],
 valid_loader = DataLoader(val_ds,   batch_size=train_cfg["batch_size"],
                           shuffle=False, num_workers=train_cfg["num_workers"], drop_last=True,)
 
-model = smp.Unet(
+model = smp.FPN(
     encoder_name=model_cfg["encoder_name"],
     encoder_weights=model_cfg["encoder_weights"],
     in_channels=model_cfg["in_channels"],
@@ -90,7 +91,8 @@ model = smp.Unet(
 pos_weight = torch.tensor(
     train_cfg["pos_weight"], dtype=torch.float32).to(device)
 pos_weight = pos_weight.view(-1, 1, 1)
-criterion = nn.BCEWithLogitsLoss(pos_weight=pos_weight)
+# criterion = nn.BCEWithLogitsLoss(pos_weight=pos_weight)
+criterion = ComboLoss(pos_weight=pos_weight)
 
 f1_background = MultilabelF1Score(num_labels=3, average=None).to(device)
 f1_card = MultilabelF1Score(num_labels=3, average=None).to(device)
@@ -118,7 +120,6 @@ early_stopper = EarlyStopping(train_cfg["early_stopping_patience"],
                               train_cfg["early_stopping_delta"],
                               save_dir)
 
-csv_path = os.path.join(save_dir, "training_log.csv")
 logger = CSVLogger(save_dir, fields=[
     "epoch", "train_loss", "val_loss", "f1_bg", "f1_card", "f1_damage", "dice_score", "lr"])
 

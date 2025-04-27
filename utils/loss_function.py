@@ -53,3 +53,20 @@ class FocalLoss(nn.Module):
         pt = torch.exp(-bce)
         focal = self.alpha * (1 - pt) ** self.gamma * bce
         return focal.mean()
+
+
+class ComboLoss(nn.Module):
+    def __init__(self, pos_weight, alpha=0.5, beta=0.5):
+        super().__init__()
+        self.bce = nn.BCEWithLogitsLoss(pos_weight=pos_weight)
+        self.alpha = alpha
+        self.beta = beta
+
+    def forward(self, logits, targets):
+        bce = self.bce(logits, targets)
+        probs = torch.sigmoid(logits)
+        intersection = (probs * targets).sum(dim=(2, 3))
+        union = probs.sum(dim=(2, 3)) + targets.sum(dim=(2, 3))
+        dice = (2 * intersection + 1e-6) / (union + 1e-6)
+        dice_loss = 1 - dice.mean()
+        return self.alpha * bce + self.beta * dice_loss
