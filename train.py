@@ -193,6 +193,8 @@ for epoch in range(train_cfg["num_epochs"]):
         "lr": current_lr,
     })
 
+    logger.generate_plots()
+
     early_stopper(avg_val, model)
     if early_stopper.early_stop:
         print("Early stopping triggered")
