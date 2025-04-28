@@ -16,7 +16,8 @@ from datetime import datetime
 
 from utils.csv_logger import CSVLogger
 from utils.early_stopping import EarlyStopping
-from utils.loss_function import ComboLoss
+from utils.loss_function import FocalLoss
+
 
 with open("model_config.yaml", "r") as f:
     cfg = yaml.safe_load(f)
@@ -92,7 +93,7 @@ pos_weight = torch.tensor(
     train_cfg["pos_weight"], dtype=torch.float32).to(device)
 pos_weight = pos_weight.view(-1, 1, 1)
 # criterion = nn.BCEWithLogitsLoss(pos_weight=pos_weight)
-criterion = ComboLoss(pos_weight=pos_weight)
+criterion = FocalLoss(alpha=[0.191, 0.191, 0.636])
 
 f1_background = MultilabelF1Score(num_labels=3, average=None).to(device)
 f1_card = MultilabelF1Score(num_labels=3, average=None).to(device)

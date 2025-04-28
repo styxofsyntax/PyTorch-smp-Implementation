@@ -1,3 +1,4 @@
+from torch.autograd import Variable
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -41,18 +42,56 @@ class WeightedCategoricalCrossEntropy(nn.Module):
         return torch.mean(weighted_loss)
 
 
+def one_hot(index, classes):
+    size = index.size() + (classes,)
+    view = index.size() + (1,)
+
+    mask = torch.Tensor(*size).fill_(0)
+    index = index.view(*view)
+    ones = 1.
+
+    if isinstance(index, Variable):
+        ones = Variable(torch.Tensor(index.size()).fill_(1))
+        mask = Variable(mask, volatile=index.volatile)
+
+    return mask.scatter_(1, index, ones)
+
+
 class FocalLoss(nn.Module):
-    def __init__(self, alpha=0.25, gamma=2.0):
+    def __init__(self, alpha=None, gamma=2.0, reduction='mean'):
         super().__init__()
-        self.alpha = alpha
+        if alpha is None:
+            self.alpha = torch.tensor([1.0, 1.0, 1.0])  # default equal
+        else:
+            self.alpha = torch.tensor(alpha)
         self.gamma = gamma
+        self.reduction = reduction
 
     def forward(self, logits, targets):
-        bce = F.binary_cross_entropy_with_logits(
+        """
+        logits: (B, C, H, W)
+        targets: (B, C, H, W)
+        """
+        if self.alpha.device != logits.device:
+            self.alpha = self.alpha.to(logits.device)
+
+        bce_loss = F.binary_cross_entropy_with_logits(
             logits, targets, reduction='none')
-        pt = torch.exp(-bce)
-        focal = self.alpha * (1 - pt) ** self.gamma * bce
-        return focal.mean()
+        probas = torch.sigmoid(logits)
+
+        pt = targets * probas + (1 - targets) * (1 - probas)
+        focal_term = (1 - pt) ** self.gamma
+
+        # Apply per-class alpha
+        alpha_factor = self.alpha.view(1, -1, 1, 1)  # reshape to (1, C, 1, 1)
+        loss = alpha_factor * focal_term * bce_loss
+
+        if self.reduction == 'mean':
+            return loss.mean()
+        elif self.reduction == 'sum':
+            return loss.sum()
+        else:
+            return loss
 
 
 class ComboLoss(nn.Module):
